@@ -18,7 +18,10 @@
  */
 #include "CSCIx229.h"
 #include "mat4.h"
+#include <stdlib.h>
+#include <stdio.h>
 #include <time.h>
+
 int axes=1;       //  Display axes
 int move=1;       //  Move light
 int proj=1;       //  Projection type
@@ -38,6 +41,10 @@ const float Ambient[]   = {0.3,0.3,0.3,1.0};
 const float Diffuse[]   = {1.0,1.0,1.0,1.0};
 const float Specular[]  = {1.0,1.0,1.0,1.0};
 const float Shinyness[] = {16};
+int num_of_blades_of_grass = 2500;
+   int GRASS_Y = 50;
+   int GRASS_X = 50;
+
 //  Transformation matrixes
 float ProjectionMatrix[16];
 float ViewMatrix[16];
@@ -214,45 +221,45 @@ const unsigned int cube_indices[] = {
    10,11,12
 
 };
+
 const float cube_data[] =
 {
 //  X  Y  Z  W   Nx Ny Nz    R G B A   s t
    //  First Segment
-   0,0, 0,+1,         0, 0,+1,   1,0,0,1,  //0
-   0.2,0, 0,+1,        0, 0,+1,   1,0,0,1,  //1
-   0, 0.66, 0,+1,      0, 0,+1,   1,0,0,1,  //2
-   0.2,0.66, 0,+1,    0, 0,+1,   1,0,0,1,  //3
-   0, 1.32, 0,+1,      0, 0,+1,   1,0,0,1,  //4
-   0.2, 1.32, 0,+1,   0, 0,+1,   1,0,0,1,  //5
-   0, 1.98, 0,+1,       0, 0,+1,   1,0,0,1, //6
-   0.2, 1.98, 0,+1,   0, 0,+1,   1,0,0,1,  //7
-   0, 2.64, 0,+1,       0, 0,+1,   1,0,0,1,  //8
-   0.2, 2.64, 0,+1,   0, 0,+1,   1,0,0,1,  //9
-   0, 3.3, 0,+1,       0, 0,+1,   1,0,0,1,  //10
-   0.2, 3.3, 0,+1,   0, 0,+1,   1,0,0,1,  //11
-   0.1, 4.0, 0,+1,   0, 0,+1,   1,0,0,1,  //12
+   0,0, 0,+1,         0, 0,+1,   0.122, 0.18, 0.024,1,  //0 
+   0.2,0, 0,+1,        0, 0,+1,   0.122, 0.18, 0.024,1,  //1
+   0, 0.66, 0,+1,      0, 0,+1,   0.294, 0.408, 0.047,1,  //2
+   0.2,0.66, 0,+1,    0, 0,+1,   0.294, 0.408, 0.047,1,  //3
+   0, 1.32, 0,+1,      0, 0,+1,   0.294, 0.408, 0.047,1,  //4
+   0.2, 1.32, 0,+1,   0, 0,+1,   0.294, 0.408, 0.047,1,  //5
+   0, 1.98, 0,+1,       0, 0,+1,   0.541, 0.631, 0.188,1, //6
+   0.2, 1.98, 0,+1,   0, 0,+1,   0.541, 0.631, 0.188,1,  //7
+   0, 2.64, 0,+1,       0, 0,+1,   0.541, 0.631, 0.188,1,  //8
+   0.2, 2.64, 0,+1,   0, 0,+1,   0.541, 0.631, 0.188,1,  //9
+   0, 3.3, 0,+1,       0, 0,+1,   0.541, 0.631, 0.188,1,  //10
+   0.2, 3.3, 0,+1,   0, 0,+1,   0.745,0.784,0.349,1,  //11
+   0.1, 4.0, 0,+1,   0, 0,+1,   0.745,0.784,0.349,1,  //12  0.745, 0.784, 0.349
 }; 
 
-static float[] createInstanceTranslations(){
-   int num_of_blades_of_grass = 1600;
-   int GRASS_Y = 40;
-   int GRASS_X = 40;
-   int TILE_SIZE = 120;
-   float instance_translations[num_blades_of_grass*2];
+float* genInstanceTranslations(){
+   srand((unsigned int)time(NULL));
+   float offsetRange = 40;
+   //int num_of_blades_of_grass = 1600;
+   float TILE_SIZE = 600;
+   float* instance_translations = (float*)malloc((num_of_blades_of_grass*3) * sizeof(float));
    int index = 0;
-   unsigned int seed = time(0);
    for (int i = 0; i < GRASS_X; i++ ){
-      const float x = i/GRASS_X;
-      
-      for(int j = 0; j < GRASS_X; j++){
-         const float y = j/GRASS_Y;
-         instance_translations[index] = x * TILE_SIZE + (rand_r(&seed) % (0.2 + 1) - 0.1);
-         instance_translations[index + 1] = y;
-         index += 2;
+      float x = i/GRASS_X;
+      for(int j = 0; j < GRASS_X; j++){ //Constructing "vec3s" of xyz information to be passed to the vert shader so we can just
+         float y = j/GRASS_Y;      // add our instance translations to our vertex positions which are also vec3s 
+         instance_translations[index] = (x * TILE_SIZE) + (((float)rand()/(float)(RAND_MAX)) * offsetRange)-(offsetRange/2); 
+         instance_translations[index + 1] = 0;
+         instance_translations[index + 2] = (y * TILE_SIZE) + (((float)rand()/(float)(RAND_MAX)) * offsetRange)-(offsetRange/2);
+         index += 3;
       }
    }
    return instance_translations;
-};
+}; 
 
 
 
@@ -278,10 +285,25 @@ static void Cube(double x,double y,double z,
       //  Create cube VAO to bind attribute arrays
       glGenVertexArrays(1,&cube_vao); //generates a vertex object name to call the VAO by
       glBindVertexArray(cube_vao);
-      glBufferData(GL_ARRAY_BUFFER, sizeof(translations),&translations[0])
       //Create index buffer
 
-      //  Get buffer name
+    
+
+      //instanceVBO data that will be stepped over per instance
+      float* translations = genInstanceTranslations(); //Generate translation data
+      unsigned int instanceVBO;                         //Create a name for the instanceVBO
+      glGenBuffers(1,&instanceVBO);                      
+      glBindBuffer(GL_ARRAY_BUFFER,instanceVBO);         //Bind VBO
+      glBufferData(GL_ARRAY_BUFFER,sizeof(float)*num_of_blades_of_grass*3,translations,GL_STATIC_DRAW); //Copy translation data to instance VBO
+      glBindBuffer(GL_ARRAY_BUFFER,0); //release buffer, dont really understand why we do this here
+      int loc = glGetAttribLocation(shader[0],"Offset"); // get offset location in shader
+      glEnableVertexAttribArray(loc); //Bind name?
+      glBindBuffer(GL_ARRAY_BUFFER,instanceVBO); //Checkout Array Buffer
+      glVertexAttribPointer(loc,3,GL_FLOAT,0,12,(void*) 0);
+      glBindBuffer(GL_ARRAY_BUFFER,0); //Release Array Buffer
+      glVertexAttribDivisor(loc,1); // (1) instanceVBO step per instance
+
+        //  Get buffer name
       unsigned int vbo=0;
       glGenBuffers(1,&vbo);
       //  Bind VBO
@@ -289,10 +311,6 @@ static void Cube(double x,double y,double z,
       //  Copy cube data to VBO
       glBufferData(GL_ARRAY_BUFFER,sizeof(cube_data),cube_data,GL_STATIC_DRAW);
 
-      unsigned int instanceVBO;
-      glGenBuffers(1,&instanceVBO);
-      glBindBuffers(GL_ARRAY_BUFFER,instanceVBO);
-      glBufferData(GL_ARRAY_BUFFER,)
 
       unsigned int ebo=0;
       glGenBuffers(1,&ebo);
@@ -301,7 +319,7 @@ static void Cube(double x,double y,double z,
 
       //  Bind arrays
       //  Vertex
-      int loc = glGetAttribLocation(shader[0],"Vertex");
+      loc = glGetAttribLocation(shader[0],"Vertex");
       glVertexAttribPointer(loc,4,GL_FLOAT,0,44,(void*) 0);
       glEnableVertexAttribArray(loc);
       //  Normal
@@ -359,8 +377,8 @@ static void Cube(double x,double y,double z,
    //  Bind Pi texture
    //glBindTexture(GL_TEXTURE_2D,0);
    //  Draw Cube
-   glDrawElements(GL_TRIANGLES,33,GL_UNSIGNED_INT,0);
-   glDrawElementsInstanced(GL_TRIANGLES,33,GL_UNSIGNED_INT,0,40);
+   //glDrawElements(GL_TRIANGLES,33,GL_UNSIGNED_INT,0);
+   glDrawElementsInstanced(GL_TRIANGLES,33,GL_UNSIGNED_INT,0,2500);
 
    //  Release VAO and VBO, and EBO
    glBindVertexArray(0);
