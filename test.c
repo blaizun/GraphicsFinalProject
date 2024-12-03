@@ -18,12 +18,8 @@
  */
 #include "CSCIx229.h"
 #include "mat4.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <time.h>
-
 int axes=1;       //  Display axes
-int move=0;       //  Move light
+int move=1;       //  Move light
 int proj=1;       //  Projection type
 int th=0;         //  Azimuth of view angle
 int ph=0;         //  Elevation of view angle
@@ -33,27 +29,20 @@ int font=0;       //  Font texture
 double asp=1;     //  Aspect ratio
 double dim=3.0;   //  Size of world
 int zh=90;        //  Light azimuth
-float Ylight=25;   //  Light elevation
+float Ylight=2;   //  Light elevation
 int shader[]  = {0,0,0,0}; //  Shader programs
 //  Light colors
 const float Emission[]  = {0.0,0.0,0.0,1.0};
-const float Ambient[]   = {0.1,0.1,0.1,1.0};
-const float Diffuse[]   = {0.25,.25,0.25,1.0};
+const float Ambient[]   = {0.3,0.3,0.3,1.0};
+const float Diffuse[]   = {1.0,1.0,1.0,1.0};
 const float Specular[]  = {1.0,1.0,1.0,1.0};
-const float Shinyness[] = {30};
-int num_of_blades_of_grass = 2500;
-   int GRASS_Y = 50;
-   int GRASS_X = 50;
-
+const float Shinyness[] = {16};
 //  Transformation matrixes
 float ProjectionMatrix[16];
 float ViewMatrix[16];
 //  Set lighting parameters using uniforms
 float Position[4];
-typedef struct {
-    float x;
-    float y;
-} vec2;
+
 /*
  * Set color
  */
@@ -63,205 +52,54 @@ void SetColor(float R,float G,float B)
    glColor3f(R,G,B);
    glMaterialfv(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE,color);
 }
-const float grass_blade_data[] = {
-//  X  Y  Z  W     Nx Ny Nz          R G B A   
-   0, 0.00, 0.06,+1,  -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, 0.0022, 0.0,+1,  -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, -.0022, 0.01,+1,  -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, -0.0022, 0.06,+1,  -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, 0.0022, 0.01, +1, -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, -0.002, 0.025,+1,  -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, 0.002, 0.025, +1, -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, -0.0015, 0.038,+1,  -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0,0.00095, 0.05, +1, -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, 0.0015, 0.038, +1, -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-   0, -0.00095, 0.05,+1,  -1.0, 0.0, 0.0,   1.0,1.0,1.0,1.0,
-};
-static unsigned int grass_vao = 0;
-static void grass(double x,double y,double z,
-                 double dx,double dy,double dz,
-                 double th)
-{
-   glUseProgram(shader[0]);
-   //Bind VAO if already initialized
-   if (grass_vao){
-      glBindVertexArray(grass_vao);
-   }
-   else{
-      //Create VAO to bind attribute arrays
-      glGenVertexArrays(1,&grass_vao); //generates a vertex object name to call the VAO by
-      glBindVertexArray(grass_vao); // makes the grass_vao the 'active vao'
-
-      //Get buffer name 
-      unsigned int grass_vbo = 0;
-      glGenBuffers(1,&grass_vbo); //generates vertex buffer name to call the vbo by
-      //bind VBO
-      glBindBuffer(GL_ARRAY_BUFFER,grass_vbo);
-      //copy data to the Vertex Buffer
-      glBufferData(GL_ARRAY_BUFFER,sizeof(grass_blade_data),grass_blade_data,GL_STATIC_DRAW);
-      
-      //location of the beginning of the array, 4 component float, 40 bytes per array, pointer is at offset 0  
-      //Verts
-      int loc = glGetAttribLocation(shader[0],"Vertex");
-      glVertexAttribPointer(loc,4,GL_FLOAT,0,44,(void*)0);
-      glEnableVertexAttribArray(loc);
-       
-      //Normals
-      loc = glGetAttribLocation(shader[0],"Normal");
-      glVertexAttribPointer(loc,3,GL_FLOAT,0,44,(void*)16);
-      glEnableVertexAttribArray(loc);
-      //Color
-      loc = glGetAttribLocation(shader[0],"Color");
-      glVertexAttribPointer(loc,3,GL_FLOAT,0,44,(void*)28);
-      glEnableVertexAttribArray(loc);
-   }
-   int id = glGetUniformLocation(shader[0],"ProjectionMatrix");
-   glUniformMatrix4fv(id,1,0,ProjectionMatrix);
-   id = glGetUniformLocation(shader[0],"ViewMatrix");
-   glUniformMatrix4fv(id,1,0,ViewMatrix);
-
-   //Create ModelView Matrix
-   float ModelViewMatrix[16];
-   mat4copy(ModelViewMatrix,ViewMatrix);
-   mat4translate(ModelViewMatrix, x, y, z);
-   mat4rotate(ModelViewMatrix,th,0,1,0);
-   mat4scale(ModelViewMatrix, dx, dy, dz);
-   id = glGetUniformLocation(shader[0],"ModelViewMatrix");
-   glUniformMatrix4fv(id,1,0,ModelViewMatrix);
-   //Create Normal Matrix
-   float NormalMatrix[9];
-   mat3normalMatrix(ModelViewMatrix,NormalMatrix);
-   id = glGetUniformLocation(shader[0],"NormalMatrix");
-   glUniformMatrix3fv(id,1,0,NormalMatrix);
-
-   //  Set lighting parameters using uniforms
-   id = glGetUniformLocation(shader[0],"Position");
-   glUniform4fv(id,1,Position);
-   id = glGetUniformLocation(shader[0],"Ambient");
-   glUniform4fv(id,1,Ambient);
-   id = glGetUniformLocation(shader[0],"Diffuse");
-   glUniform4fv(id,1,Diffuse);
-   id = glGetUniformLocation(shader[0],"Specular");
-   glUniform4fv(id,1,Specular);
-
-   //  Set material properties as uniforms
-   id = glGetUniformLocation(shader[0],"Ks");
-   glUniform4fv(id,1,Specular);
-   id = glGetUniformLocation(shader[0],"Ke");
-   glUniform4fv(id,1,Emission);
-   id = glGetUniformLocation(shader[0],"Shinyness");
-   glUniform1f(id,Shinyness[0]);
-   //  Draw Cube
-   glDrawArrays(GL_TRIANGLES,0,11);
-
-   //  Release VAO and VBO
-   glBindVertexArray(0);
-   glBindBuffer(GL_ARRAY_BUFFER,0);
-                        
-}
 
 //  Cube vertex, normal, color and texture data
-// const float cube_data[] =
-// {
-// //  X  Y  Z  W   Nx Ny Nz    R G B A   s t
-//    //  Front
-//    +1,+1,+1,+1,   0, 0,+1,   1,0,0,1,  1,1,
-//    -1,+1,+1,+1,   0, 0,+1,   1,0,0,1,  0,1,
-//    +1,-1,+1,+1,   0, 0,+1,   1,0,0,1,  1,0,
-//    -1,+1,+1,+1,   0, 0,+1,   1,0,0,1,  0,1,
-//    +1,-1,+1,+1,   0, 0,+1,   1,0,0,1,  1,0,
-//    -1,-1,+1,+1,   0, 0,+1,   1,0,0,1,  0,0,
-//    //  Back                        
-//    -1,-1,-1,+1,   0, 0,-1,   0,0,1,1,  1,0,
-//    +1,-1,-1,+1,   0, 0,-1,   0,0,1,1,  0,0,
-//    -1,+1,-1,+1,   0, 0,-1,   0,0,1,1,  1,1,
-//    +1,-1,-1,+1,   0, 0,-1,   0,0,1,1,  0,0,
-//    -1,+1,-1,+1,   0, 0,-1,   0,0,1,1,  1,1,
-//    +1,+1,-1,+1,   0, 0,-1,   0,0,1,1,  0,1,
-//    //  Right                       
-//    +1,+1,+1,+1,  +1, 0, 0,   1,1,0,1,  0,1,
-//    +1,-1,+1,+1,  +1, 0, 0,   1,1,0,1,  0,0,
-//    +1,+1,-1,+1,  +1, 0, 0,   1,1,0,1,  1,1,
-//    +1,-1,+1,+1,  +1, 0, 0,   1,1,0,1,  0,0,
-//    +1,+1,-1,+1,  +1, 0, 0,   1,1,0,1,  1,1,
-//    +1,-1,-1,+1,  +1, 0, 0,   1,1,0,1,  1,0,
-//    //  Left                        
-//    -1,+1,+1,+1,  -1, 0, 0,   0,1,0,1,  1,1,
-//    -1,+1,-1,+1,  -1, 0, 0,   0,1,0,1,  0,1,
-//    -1,-1,+1,+1,  -1, 0, 0,   0,1,0,1,  1,0,
-//    -1,+1,-1,+1,  -1, 0, 0,   0,1,0,1,  0,1,
-//    -1,-1,+1,+1,  -1, 0, 0,   0,1,0,1,  1,0,
-//    -1,-1,-1,+1,  -1, 0, 0,   0,1,0,1,  0,0,
-//    //  Top                         
-//    +1,+1,+1,+1,   0,+1, 0,   0,1,1,1,  1,0,
-//    +1,+1,-1,+1,   0,+1, 0,   0,1,1,1,  1,1,
-//    -1,+1,+1,+1,   0,+1, 0,   0,1,1,1,  0,0,
-//    +1,+1,-1,+1,   0,+1, 0,   0,1,1,1,  1,1,
-//    -1,+1,+1,+1,   0,+1, 0,   0,1,1,1,  0,0,
-//    -1,+1,-1,+1,   0,+1, 0,   0,1,1,1,  0,1,
-//    //  Bottom                      
-//    -1,-1,-1,+1,   0,-1, 0,   1,0,1,1,  0,0,
-//    +1,-1,-1,+1,   0,-1, 0,   1,0,1,1,  1,0,
-//    -1,-1,+1,+1,   0,-1, 0,   1,0,1,1,  0,1,
-//    +1,-1,-1,+1,   0,-1, 0,   1,0,1,1,  1,0,
-//    -1,-1,+1,+1,   0,-1, 0,   1,0,1,1,  0,1,
-//    +1,-1,+1,+1,   0,-1, 0,   1,0,1,1,  1,1,
-//    };
-const unsigned int cube_indices[] = {
-   0,1,2,
-   2,1,3,
-   4,2,3,
-   4,3,5,
-   6,4,5,
-   7,6,5,
-   8,6,7,
-   7,9,8,
-   8,9,10,
-   9,11,10,
-   10,11,12
-
-};
-
 const float cube_data[] =
 {
 //  X  Y  Z  W   Nx Ny Nz    R G B A   s t
-   //  First Segment
-   0,0, 0,+1,         0, 0,+1,   0.122, 0.18, 0.024,1,  //0 
-   0.2,0, 0,+1,        0, 0,+1,   0.122, 0.18, 0.024,1,  //1
-   0, 0.66, 0,+1,      0, 0,+1,   0.294, 0.408, 0.047,1,  //2
-   0.2,0.66, 0,+1,    0, 0,+1,   0.294, 0.408, 0.047,1,  //3
-   0, 1.32, 0,+1,      0, 0,+1,   0.294, 0.408, 0.047,1,  //4
-   0.2, 1.32, 0,+1,   0, 0,+1,   0.294, 0.408, 0.047,1,  //5
-   0, 1.98, 0,+1,       0, 0,+1,   0.541, 0.631, 0.188,1, //6
-   0.2, 1.98, 0,+1,   0, 0,+1,   0.541, 0.631, 0.188,1,  //7
-   0, 2.64, 0,+1,       0, 0,+1,   0.541, 0.631, 0.188,1,  //8
-   0.2, 2.64, 0,+1,   0, 0,+1,   0.541, 0.631, 0.188,1,  //9
-   0, 3.3, 0,+1,       0, 0,+1,   0.541, 0.631, 0.188,1,  //10
-   0.2, 3.3, 0,+1,   0, 0,+1,   0.745,0.784,0.349,1,  //11
-   0.1, 4.0, 0,+1,   0, 0,+1,   0.745,0.784,0.349,1,  //12  0.745, 0.784, 0.349
-}; 
-
-float* genInstanceTranslations(){
-   srand((unsigned int)time(NULL));
-   float offsetRange = 40;
-   //int num_of_blades_of_grass = 1600;
-   float TILE_SIZE = 600;
-   float* instance_translations = (float*)malloc((num_of_blades_of_grass*3) * sizeof(float));
-   int index = 0;
-   for (int i = 0; i < GRASS_X; i++ ){
-      float x = i/GRASS_X;
-      for(int j = 0; j < GRASS_X; j++){ //Constructing "vec3s" of xyz information to be passed to the vert shader so we can just
-         float y = j/GRASS_Y;      // add our instance translations to our vertex positions which are also vec3s 
-         instance_translations[index] = (x * TILE_SIZE) + (((float)rand()/(float)(RAND_MAX)) * offsetRange)-(offsetRange/2); 
-         instance_translations[index + 1] = 0;
-         instance_translations[index + 2] = (y * TILE_SIZE) + (((float)rand()/(float)(RAND_MAX)) * offsetRange)-(offsetRange/2);
-         index += 3;
-      }
-   }
-   return instance_translations;
-}; 
-
-
+   //  Front
+   +1,+1,+1,+1,   0, 0,+1,   1,0,0,1,  1,1,
+   -1,+1,+1,+1,   0, 0,+1,   1,0,0,1,  0,1,
+   +1,-1,+1,+1,   0, 0,+1,   1,0,0,1,  1,0,
+   -1,+1,+1,+1,   0, 0,+1,   1,0,0,1,  0,1,
+   +1,-1,+1,+1,   0, 0,+1,   1,0,0,1,  1,0,
+   -1,-1,+1,+1,   0, 0,+1,   1,0,0,1,  0,0,
+   //  Back                        
+   -1,-1,-1,+1,   0, 0,-1,   0,0,1,1,  1,0,
+   +1,-1,-1,+1,   0, 0,-1,   0,0,1,1,  0,0,
+   -1,+1,-1,+1,   0, 0,-1,   0,0,1,1,  1,1,
+   +1,-1,-1,+1,   0, 0,-1,   0,0,1,1,  0,0,
+   -1,+1,-1,+1,   0, 0,-1,   0,0,1,1,  1,1,
+   +1,+1,-1,+1,   0, 0,-1,   0,0,1,1,  0,1,
+   //  Right                       
+   +1,+1,+1,+1,  +1, 0, 0,   1,1,0,1,  0,1,
+   +1,-1,+1,+1,  +1, 0, 0,   1,1,0,1,  0,0,
+   +1,+1,-1,+1,  +1, 0, 0,   1,1,0,1,  1,1,
+   +1,-1,+1,+1,  +1, 0, 0,   1,1,0,1,  0,0,
+   +1,+1,-1,+1,  +1, 0, 0,   1,1,0,1,  1,1,
+   +1,-1,-1,+1,  +1, 0, 0,   1,1,0,1,  1,0,
+   //  Left                        
+   -1,+1,+1,+1,  -1, 0, 0,   0,1,0,1,  1,1,
+   -1,+1,-1,+1,  -1, 0, 0,   0,1,0,1,  0,1,
+   -1,-1,+1,+1,  -1, 0, 0,   0,1,0,1,  1,0,
+   -1,+1,-1,+1,  -1, 0, 0,   0,1,0,1,  0,1,
+   -1,-1,+1,+1,  -1, 0, 0,   0,1,0,1,  1,0,
+   -1,-1,-1,+1,  -1, 0, 0,   0,1,0,1,  0,0,
+   //  Top                         
+   +1,+1,+1,+1,   0,+1, 0,   0,1,1,1,  1,0,
+   +1,+1,-1,+1,   0,+1, 0,   0,1,1,1,  1,1,
+   -1,+1,+1,+1,   0,+1, 0,   0,1,1,1,  0,0,
+   +1,+1,-1,+1,   0,+1, 0,   0,1,1,1,  1,1,
+   -1,+1,+1,+1,   0,+1, 0,   0,1,1,1,  0,0,
+   -1,+1,-1,+1,   0,+1, 0,   0,1,1,1,  0,1,
+   //  Bottom                      
+   -1,-1,-1,+1,   0,-1, 0,   1,0,1,1,  0,0,
+   +1,-1,-1,+1,   0,-1, 0,   1,0,1,1,  1,0,
+   -1,-1,+1,+1,   0,-1, 0,   1,0,1,1,  0,1,
+   +1,-1,-1,+1,   0,-1, 0,   1,0,1,1,  1,0,
+   -1,-1,+1,+1,   0,-1, 0,   1,0,1,1,  0,1,
+   +1,-1,+1,+1,   0,-1, 0,   1,0,1,1,  1,1,
+   };
 
 /*
  *  Draw a cube
@@ -277,33 +115,14 @@ static void Cube(double x,double y,double z,
    //  Once initialized, just bind VAO
    if (cube_vao)
       glBindVertexArray(cube_vao);
-   //  Initialize VAO and VBO and EBO
+   //  Initialize VAO and VBO
    else
-   {  
-      
-      
+   {
       //  Create cube VAO to bind attribute arrays
-      glGenVertexArrays(1,&cube_vao); //generates a vertex object name to call the VAO by
+      glGenVertexArrays(1,&cube_vao);
       glBindVertexArray(cube_vao);
-      //Create index buffer
 
-    
-
-      //instanceVBO data that will be stepped over per instance
-      float* translations = genInstanceTranslations(); //Generate translation data
-      unsigned int instanceVBO;                         //Create a name for the instanceVBO
-      glGenBuffers(1,&instanceVBO);                      
-      glBindBuffer(GL_ARRAY_BUFFER,instanceVBO);         //Bind VBO
-      glBufferData(GL_ARRAY_BUFFER,sizeof(float)*num_of_blades_of_grass*3,translations,GL_STATIC_DRAW); //Copy translation data to instance VBO
-      glBindBuffer(GL_ARRAY_BUFFER,0); //release buffer, dont really understand why we do this here
-      int loc = glGetAttribLocation(shader[0],"Offset"); // get offset location in shader
-      glEnableVertexAttribArray(loc); //Bind name?
-      glBindBuffer(GL_ARRAY_BUFFER,instanceVBO); //Checkout Array Buffer
-      glVertexAttribPointer(loc,3,GL_FLOAT,0,12,(void*) 0);
-      glBindBuffer(GL_ARRAY_BUFFER,0); //Release Array Buffer
-      glVertexAttribDivisor(loc,1); // (1) instanceVBO step per instance
-
-        //  Get buffer name
+      //  Get buffer name
       unsigned int vbo=0;
       glGenBuffers(1,&vbo);
       //  Bind VBO
@@ -311,29 +130,23 @@ static void Cube(double x,double y,double z,
       //  Copy cube data to VBO
       glBufferData(GL_ARRAY_BUFFER,sizeof(cube_data),cube_data,GL_STATIC_DRAW);
 
-
-      unsigned int ebo=0;
-      glGenBuffers(1,&ebo);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
-      glBufferData(GL_ELEMENT_ARRAY_BUFFER,sizeof(cube_indices),cube_indices, GL_STATIC_DRAW);
-
       //  Bind arrays
       //  Vertex
-      loc = glGetAttribLocation(shader[0],"Vertex");
-      glVertexAttribPointer(loc,4,GL_FLOAT,0,44,(void*) 0);
+      int loc = glGetAttribLocation(shader[0],"Vertex");
+      glVertexAttribPointer(loc,4,GL_FLOAT,0,52,(void*) 0);
       glEnableVertexAttribArray(loc);
       //  Normal
       loc = glGetAttribLocation(shader[0],"Normal");
-      glVertexAttribPointer(loc,3,GL_FLOAT,0,44,(void*)16);
+      glVertexAttribPointer(loc,3,GL_FLOAT,0,52,(void*)16);
       glEnableVertexAttribArray(loc);
       //  Color
       loc  = glGetAttribLocation(shader[0],"Color");
-      glVertexAttribPointer(loc,4,GL_FLOAT,0,44,(void*)28);
+      glVertexAttribPointer(loc,4,GL_FLOAT,0,52,(void*)28);
       glEnableVertexAttribArray(loc);
       //  Texture
-   //    loc  = glGetAttribLocation(shader[0],"Texture");
-   //    glVertexAttribPointer(loc,2,GL_FLOAT,0,52,(void*)44);
-   //    glEnableVertexAttribArray(loc);
+      loc  = glGetAttribLocation(shader[0],"Texture");
+      glVertexAttribPointer(loc,2,GL_FLOAT,0,52,(void*)44);
+      glEnableVertexAttribArray(loc);
    }
 
    //  Set Projection and View Matrix
@@ -375,16 +188,15 @@ static void Cube(double x,double y,double z,
    glUniform1f(id,Shinyness[0]);
 
    //  Bind Pi texture
-   //glBindTexture(GL_TEXTURE_2D,0);
+   glBindTexture(GL_TEXTURE_2D,pi);
    //  Draw Cube
-   //glDrawElements(GL_TRIANGLES,33,GL_UNSIGNED_INT,0);
-   glDrawElementsInstanced(GL_TRIANGLES,33,GL_UNSIGNED_INT,0,2500);
+   glDrawArrays(GL_TRIANGLES,0,36);
 
-   //  Release VAO and VBO, and 
+   //  Release VAO and VBO
    glBindVertexArray(0);
    glBindBuffer(GL_ARRAY_BUFFER,0);
-   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 }
+
 /*
  * Draw a character by selecting character from font texture
  *   This uses a geometry shader to billboard the letter
@@ -471,8 +283,8 @@ static void Char(float x,float y,float z,float size,unsigned char ch)
    //  Release VAO and VBO
    glBindVertexArray(0);
    glBindBuffer(GL_ARRAY_BUFFER,0);
-   glBindTexture(GL_TEXTURE_2D,0);
 }
+
 //  Axes vertex data
 const float axes_data[] =
 {
@@ -483,7 +295,6 @@ const float axes_data[] =
    0,0,0,
    0,0,2,
 };
-
 static unsigned int axes_vao=0;
 /*
  * Draw axes
@@ -541,6 +352,9 @@ static void Axes()
    Char(0,0,2,0.2,'Z');
 }
 
+/*
+ *  OpenGL (GLUT) calls this routine to display the scene
+ */
 void display()
 {
    //  Erase the window and the depth buffer
@@ -548,18 +362,27 @@ void display()
 
    //  Enable Z-buffering in OpenGL
    glEnable(GL_DEPTH_TEST);
-   glClearColor(0.07f, 0.13f, 0.17f, 1.0f);
+
    //  Create Projection matrix
    mat4identity(ProjectionMatrix);
-
-   mat4perspective(ProjectionMatrix , fov,asp,dim/16,16*dim);
+   if (proj)
+      mat4perspective(ProjectionMatrix , fov,asp,dim/16,16*dim);
+   else
+      mat4ortho(ProjectionMatrix , -dim*asp, +dim*asp, -dim, +dim, -dim, +dim);
    //  Create View matrix
    mat4identity(ViewMatrix);
-   double Ex = -2*dim*Sin(th)*Cos(ph);
-   double Ey = +2*dim        *Sin(ph);
-   double Ez = +2*dim*Cos(th)*Cos(ph);
-   mat4lookAt(ViewMatrix , Ex,Ey,Ez , 0,0,0 , 0,Cos(ph),0);
-   
+   if (proj)
+   {
+      double Ex = -2*dim*Sin(th)*Cos(ph);
+      double Ey = +2*dim        *Sin(ph);
+      double Ez = +2*dim*Cos(th)*Cos(ph);
+      mat4lookAt(ViewMatrix , Ex,Ey,Ez , 0,0,0 , 0,Cos(ph),0);
+   }
+   else
+   {
+      mat4rotate(ViewMatrix , ph,1,0,0);
+      mat4rotate(ViewMatrix , th,0,1,0);
+   }
    //  Light position
    Position[0] = 4*Cos(zh);
    Position[1] = Ylight;
@@ -569,12 +392,6 @@ void display()
    //  Now draw the scene (just a cube for now)
    //  To do other objects create a VBO and VAO for each object
    Cube(0,0,0 , 1,1,1 , 0);
-   Cube(40,0,0 , 1,1,1 , 0);
-   Cube(40,0,40 , 1,1,1 , 0);
-   Cube(80,0,40 , 1,1,1 , 0);
-   //Cube(0,0,0, 1,1,1,60);
-   //grass(0,0,0 , 10,10,10 , 0);
-   
 
    //  Draw axes
    if (axes) Axes();
@@ -787,10 +604,10 @@ int CreateShaderProg(char* VertFile,char* FragFile)
 }
 
 int CreateComputeShader(char* computeShaderSource){
-   GLuint computeShader = CreateShader(GL_COMPUTE_SHADER,computeShaderSource);
+   Gluint computeShader = glCreateShader(GL_COMPUTE_SHADER,computeShaderSource);
    // glShaderSource(computShader,1,computeShaderSource,NULL);
    glCompileShader(computeShader);
-   GLuint computeProgram = glCreateProgram();
+   Gluint computeProgram = glCreateProgram();
    glAttachShader(computeProgram,computeShader);
    glLinkProgram(computeProgram);
    return computeProgram;
@@ -829,7 +646,7 @@ int main(int argc,char* argv[])
    //  Request double buffered, true color window with Z buffering at 600x600
    glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
    glutInitWindowSize(600,600);
-   glutCreateWindow("Blaizun Diamond");
+   glutCreateWindow("Shaders - OpenGL4");
 #ifdef USEGLEW
    //  Initialize GLEW
    if (glewInit()!=GLEW_OK) Fatal("Error initializing GLEW\n");
@@ -849,6 +666,7 @@ int main(int argc,char* argv[])
    //  Create Shader Programs
    shader[0] = CreateShaderProg("gl4pix.vert","gl4pix.frag");
    shader[1] = CreateShaderProg("gl4fix.vert","gl4fix.frag");
+   shader[3] = CreateShaderProg("computeTex.")
    shader[2] = CreateShaderGeom("gl4tex.vert","gl4tex.geom","gl4tex.frag");
    //  Pass control to GLUT so it can interact with the user
    ErrCheck("init");
